@@ -30,7 +30,7 @@ jobs:
             docs/**/*.md
             plugins/kuadrant/**/*.md
             e2e-tests/**/*.md
-            kuadrant/**/*.md
+            kuadrant-dev-setup/**/*.md
 
         continue-on-error: true
       
