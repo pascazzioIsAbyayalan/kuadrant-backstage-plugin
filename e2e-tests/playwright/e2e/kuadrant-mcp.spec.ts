@@ -1,10 +1,26 @@
-import { test, expect } from "@playwright/test";
-import { Common } from "../utils/common";
+import { test, expect, type Page } from "@playwright/test";
+import { loginAs } from "../support/auth/login-as";
 import { TIMEOUTS, waitForMcpPageReady } from "../utils/kuadrant-helpers";
 
-test.describe("Kuadrant MCP Management", () => {
-  let common: Common;
+// the host app has an "MCP Management" sidebar section; rhdh's dynamic menu
+// config nests the mcp entries in the "Kuadrant" group instead
+function mcpNavEntry(page: Page) {
+  const nav = page.locator("nav");
+  return nav
+    .getByText("MCP Management")
+    .or(nav.getByRole("button", { name: "Kuadrant" }))
+    .first();
+}
 
+async function openMcpNav(page: Page) {
+  const nav = page.locator("nav");
+  await expect(mcpNavEntry(page)).toBeVisible({ timeout: TIMEOUTS.SLOW });
+  const section = nav.getByText("MCP Management").first();
+  if (await section.count()) await section.click();
+  else await nav.getByRole("button", { name: "Kuadrant" }).click();
+}
+
+test.describe("Kuadrant MCP Management", () => {
   test.beforeAll(async () => {
     test.info().annotations.push({
       type: "component",
@@ -13,18 +29,15 @@ test.describe("Kuadrant MCP Management", () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    common = new Common(page);
-    await common.loginAsGuest();
+    await loginAs(page, "owner1@kuadrant.local");
   });
 
   test("should display MCP Management section in sidebar", async ({ page }) => {
-    const mcpSection = page.locator("nav").getByText("MCP Management");
-    await expect(mcpSection.first()).toBeVisible({ timeout: TIMEOUTS.SLOW });
+    await expect(mcpNavEntry(page)).toBeVisible({ timeout: TIMEOUTS.SLOW });
   });
 
   test("should display MCP Overview sub-menu item", async ({ page }) => {
-    const mcpSection = page.locator("nav").getByText("MCP Management").first();
-    await mcpSection.click();
+    await openMcpNav(page);
 
     const overviewLink = page.locator('nav a[href="/kuadrant/mcp-management"]');
     await expect(overviewLink).toBeVisible({ timeout: TIMEOUTS.DEFAULT });
@@ -33,13 +46,19 @@ test.describe("Kuadrant MCP Management", () => {
   test("should open the MCP Inspector empty state", async ({ page }) => {
     await page.goto("/kuadrant/mcp-inspector");
 
-    await expect(page.getByRole("heading", { name: "MCP Inspector" })).toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: "MCP Inspector" }),
+    ).toBeVisible({
       timeout: TIMEOUTS.SLOW,
     });
-    await expect(page.getByLabel("Select an MCP gateway extension")).toBeVisible({
+    await expect(
+      page.getByLabel("Select an MCP gateway extension"),
+    ).toBeVisible({
       timeout: TIMEOUTS.DEFAULT,
     });
-    await expect(page.getByText("No connection", { exact: true }).first()).toBeVisible();
+    await expect(
+      page.getByText("No connection", { exact: true }).first(),
+    ).toBeVisible();
   });
 
   test("should display MCP management page header", async ({ page }) => {

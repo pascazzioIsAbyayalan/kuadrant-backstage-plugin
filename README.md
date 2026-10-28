@@ -31,6 +31,10 @@ yarn install
 
 Three developer loops. Pick one. Do not run kind and oinc together (both write `.env`).
 
+To test the plugins loaded by an existing Backstage/RHDH deployment, run
+`make e2e-remote BASE_URL=https://backstage.example.com`.
+See the [deployment prerequisites](docs/e2e-testing.md#running-against-a-deployed-backstage).
+
 | | Commands | URL | Auth | For |
 |---|---|---|---|---|
 | **1. kind + host app** | `make -C kuadrant-dev-setup kind-create` then `yarn dev:kind` (or `yarn dev`) | http://localhost:3000 | OIDC (Dex :5556) | In-tree plugins, hot reload. Lighter Kubernetes. |
@@ -256,6 +260,7 @@ This repo is a fork of RHDH with Kuadrant-specific customisations. See [KUADRANT
 - [docs/api-reference.md](docs/api-reference.md) - Backend API reference
 - [kuadrant-dev-setup/README.md](kuadrant-dev-setup/README.md) - Kind development cluster
 - [docs/oinc.md](docs/oinc.md) - oinc: host app (`yarn dev:oinc`) and published dynamic plugins in RHDH (`yarn oinc:rhdh`)
+- [docs/release-testing.md](docs/release-testing.md) - Release testing of the productised plugins in RHDH, with manifests
 - [KUADRANT.md](KUADRANT.md) - Branching strategy and customisations
 
 ## Technical Details

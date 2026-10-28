@@ -1,10 +1,25 @@
-import { test, expect } from "../fixtures/test";
-import { Common } from "../utils/common";
+import { test, expect, type Page } from "../fixtures/test";
+import { loginAs } from "../support/auth/login-as";
 import { TIMEOUTS } from "../utils/kuadrant-helpers";
 
-test.describe("Kuadrant Skeleton Loaders", () => {
-  let common: Common;
+// skeletons on screen in the page content, read in one evaluateAll(). they can go
+// between separate calls, and an auto-waiting assertion on one that has gone fails
+// at its timeout. returns the classes of any without the text or rect variant.
+async function malformedSkeletons(page: Page): Promise<string[]> {
+  return page
+    .locator("main .MuiSkeleton-root:visible")
+    .evaluateAll((els) =>
+      els
+        .filter(
+          (el) =>
+            !el.classList.contains("MuiSkeleton-text") &&
+            !el.classList.contains("MuiSkeleton-rect"),
+        )
+        .map((el) => el.className),
+    );
+}
 
+test.describe("Kuadrant Skeleton Loaders", () => {
   test.beforeAll(async () => {
     test.info().annotations.push({
       type: "component",
@@ -13,8 +28,7 @@ test.describe("Kuadrant Skeleton Loaders", () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    common = new Common(page);
-    await common.dexQuickLogin("admin@kuadrant.local");
+    await loginAs(page, "admin@kuadrant.local");
   });
 
   test("should show skeleton loaders on My API Keys page while loading", async ({
@@ -24,30 +38,13 @@ test.describe("Kuadrant Skeleton Loaders", () => {
     await page.goto("/kuadrant/my-api-keys");
 
     // Check for skeleton loaders (Material-UI Skeleton creates spans with specific classes)
-    // We look for the MuiSkeleton class which is present during loading
-    const skeletons = page.locator(".MuiSkeleton-root");
-
     // Either skeletons are visible (still loading) or they're gone (loaded fast)
     // We can't guarantee we'll catch them, but if we do, they should be proper skeletons
-    const skeletonCount = await skeletons.count();
-
-    if (skeletonCount > 0) {
-      // If skeletons are present, verify they look correct
-      const firstSkeleton = skeletons.first();
-      await expect(firstSkeleton).toBeVisible();
-
-      // Skeletons should have the text variant or rect variant class
-      const hasTextVariant = await firstSkeleton.evaluate(
-        (el) =>
-          el.classList.contains("MuiSkeleton-text") ||
-          el.classList.contains("MuiSkeleton-rect"),
-      );
-      expect(hasTextVariant).toBe(true);
-    }
+    expect(await malformedSkeletons(page)).toEqual([]);
 
     // Eventually, skeletons should disappear and real content should load
     await expect(async () => {
-      const spinner = page.locator('[role="progressbar"]:visible');
+      const spinner = page.locator('main [role="progressbar"]:visible');
       await expect(spinner).toHaveCount(0);
 
       // No skeletons should be visible after loading
@@ -72,18 +69,12 @@ test.describe("Kuadrant Skeleton Loaders", () => {
 
     await page.goto("/kuadrant/api-products");
 
-    // Check for skeleton loaders during initial load
-    const skeletons = page.locator(".MuiSkeleton-root");
-    const skeletonCount = await skeletons.count();
-
-    if (skeletonCount > 0) {
-      // Verify skeleton structure if present
-      await expect(skeletons.first()).toBeVisible();
-    }
+    // Check for skeleton loaders during initial load, and their structure if present
+    expect(await malformedSkeletons(page)).toEqual([]);
 
     // Wait for page to fully load
     await expect(async () => {
-      const spinner = page.locator('[role="progressbar"]:visible');
+      const spinner = page.locator('main [role="progressbar"]:visible');
       await expect(spinner).toHaveCount(0);
       const visibleSkeletons = page.locator(".MuiSkeleton-root:visible");
       await expect(visibleSkeletons).toHaveCount(0);
@@ -141,32 +132,27 @@ test.describe("Kuadrant Skeleton Loaders", () => {
     for (const url of pages) {
       await page.goto(url);
 
-      // Wait for initial load
-      await page.waitForLoadState("load").catch(() => {});
-
-      // Wait for global app loader to disappear (it uses CircularProgress but is app infrastructure)
-      // The loader is a centered, full-height box
-      await page.waitForTimeout(500); // Give the loader time to disappear
-
       // The Backstage Progress component renders as a CircularProgress with role="progressbar"
       // but we want to make sure it's not being used for page-level loading in Kuadrant components
       // (it's still OK for inline operations like delete buttons)
 
       // Check that we're using skeletons OR the page is already loaded
       await expect(async () => {
-        const progressBars = page.locator('[role="progressbar"]:visible');
-        const skeletons = page.locator(".MuiSkeleton-root:visible");
-        const progressCount = await progressBars.count();
-        const skeletonCount = await skeletons.count();
+        // the app's own loaders show briefly after navigation. count them in one pass:
+        // one can vanish between two calls, and evaluate() then waits out the timeout
+        const pageSpinners = await page
+          .locator('main [role="progressbar"]:visible')
+          .evaluateAll(
+            (els) => els.filter((el) => el.closest("button") === null).length,
+          );
+        const skeletonCount = await page
+          .locator(".MuiSkeleton-root:visible")
+          .count();
 
         // Either we have skeletons (new loading pattern) or nothing (already loaded)
         // We should NOT have progress bars without skeletons for main page loading
-        if (progressCount > 0 && skeletonCount === 0) {
-          // Only acceptable if it's a small inline spinner (like in a button)
-          const isInButton = await progressBars.first().evaluate((el) => {
-            return el.closest("button") !== null;
-          });
-          expect(isInButton).toBe(true);
+        if (skeletonCount === 0) {
+          expect(pageSpinners).toBe(0);
         }
       }).toPass({ timeout: TIMEOUTS.DEFAULT });
     }
